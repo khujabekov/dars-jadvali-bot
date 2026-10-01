@@ -1,3 +1,4 @@
+import html
 from pathlib import Path
 from datetime import datetime, date
 from typing import Dict, List, Optional, Tuple
@@ -14,6 +15,11 @@ UZBEK_DAYS = {
     6: "Yakshanba"
 }
 
+NUM_EMOJIS = {
+    1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣",
+    6: "6️⃣", 7: "7️⃣", 8: "8️⃣", 9: "9️⃣", 10: "🔟"
+}
+
 def clean_str(val) -> str:
     if val is None:
         return ""
@@ -21,6 +27,10 @@ def clean_str(val) -> str:
     if s.endswith(".0") and s[:-2].isdigit():
         return s[:-2]
     return s
+
+def escape_html(val: any) -> str:
+    s = clean_str(val)
+    return html.escape(s, quote=False)
 
 def format_room(room_str: any) -> str:
     r = clean_str(room_str)
@@ -225,83 +235,100 @@ def parse_schedule_excel(file_path: Path) -> Tuple[Dict[int, List[dict]], Option
 
     return schedule, None
 
-def format_day_schedule(day_num: int, target_date: Optional[date] = None, schedule: Optional[Dict[int, List[dict]]] = None, file_path: Optional[Path] = None) -> str:
-    """Kunlik dars jadvalini oddiy va tushunarli ko'rinishda qaytaradi."""
+def format_day_schedule(
+    day_num: int, 
+    target_date: Optional[date] = None, 
+    schedule: Optional[Dict[int, List[dict]]] = None, 
+    file_path: Optional[Path] = None,
+    header_title: Optional[str] = None
+) -> str:
+    """Kunlik dars jadvalini so'ralgan formatda (sana | KUN, vaqt va fan) qaytaradi."""
     if schedule is None:
         if file_path is None:
             from config import SCHEDULE_FILE
             file_path = SCHEDULE_FILE
         schedule, error = parse_schedule_excel(file_path)
         if error:
-            return f"❌ <b>Xatolik:</b> {error}"
+            return f"❌ <b>Xatolik:</b> {escape_html(error)}"
             
-    day_name = UZBEK_DAYS.get(day_num, "Noma'lum kun")
-    date_display = f" ({target_date.strftime('%d.%m.%Y')})" if target_date else ""
+    day_name = UZBEK_DAYS.get(day_num, "Noma'lum kun").upper()
+    date_str = target_date.strftime("%d.%m.%Y") if target_date else ""
+    header = f"<b>{date_str} | {day_name}</b>" if date_str else f"<b>{day_name}</b>"
     
     lessons = schedule.get(day_num, [])
     
     if not lessons:
         if day_num == 6:  # Yakshanba
-            return f"📅 <b>{day_name}</b>{date_display}\n\nBugun dam olish kuni."
+            empty_msg = "Bugun dam olish kuni."
         else:
-            return f"📅 <b>{day_name}</b>{date_display}\n\nBugun dars yo'q."
+            empty_msg = "Bugun dars yo'q."
+        return f"{header}\n\n{empty_msg}"
             
     items = []
-    for idx, item in enumerate(lessons, 1):
-        time_part = f"{item['time']} — " if item.get('time') else ""
+    for item in lessons:
+        time_raw = clean_str(item.get('time', ''))
+        start_time = time_raw.split('-')[0].strip() if time_raw else ""
+        time_part = f"<b>{escape_html(start_time)}</b>   " if start_time else ""
         
         if "subgroups" in item:
             sg = item["subgroups"]
-            if sg[0]["subject"] == sg[1]["subject"]:
-                line = f"{idx}. {time_part}<b>{sg[0]['subject']}</b>\n"
-                line += f"   • 1-guruh: {sg[0]['room']} | {sg[0]['teacher']}\n"
-                line += f"   • 2-guruh: {sg[1]['room']} | {sg[1]['teacher']}"
+            s1 = sg[0]
+            s2 = sg[1]
+            sub1_name = escape_html(s1.get('subject', ''))
+            sub2_name = escape_html(s2.get('subject', ''))
+            
+            if s1.get('subject') == s2.get('subject'):
+                items.append(f"{time_part}{sub1_name}")
             else:
-                line = f"{idx}. {time_part}<b>{sg[0]['subject']} / {sg[1]['subject']}</b>\n"
-                p1 = f"{sg[0]['room']} | {sg[0]['teacher']}" if sg[0]['teacher'] else sg[0]['room']
-                p2 = f"{sg[1]['room']} | {sg[1]['teacher']}" if sg[1]['teacher'] else sg[1]['room']
-                line += f"   • 1-guruh: {sg[0]['subject']} ({p1})\n"
-                line += f"   • 2-guruh: {sg[1]['subject']} ({p2})"
+                items.append(f"{time_part}{sub1_name} / {sub2_name}")
         else:
-            subject_part = f"<b>{item['subject']}</b>"
-            details = [v for v in [item.get('room'), item.get('teacher'), item.get('type')] if v]
-            line = f"{idx}. {time_part}{subject_part}"
-            if details:
-                line += f"\n   {' | '.join(details)}"
-                
-        items.append(line)
+            subject_name = escape_html(item.get('subject', ''))
+            items.append(f"{time_part}{subject_name}")
         
-    header = f"📅 <b>{day_name}</b>{date_display}"
-    return f"{header}\n\n" + "\n\n".join(items)
+    return f"{header}\n\n" + "\n".join(items)
 
 def format_week_schedule(file_path: Optional[Path] = None) -> str:
-    """Haftalik to'liq dars jadvalini oddiy va ixcham ko'rinishda qaytaradi."""
+    """Haftalik to'liq dars jadvalini ixcham ko'rinishda qaytaradi."""
     if file_path is None:
         from config import SCHEDULE_FILE
         file_path = SCHEDULE_FILE
         
     schedule, error = parse_schedule_excel(file_path)
     if error:
-        return f"❌ <b>Xatolik:</b> {error}"
+        return f"❌ <b>Xatolik:</b> {escape_html(error)}"
         
     total_lessons = sum(len(l) for l in schedule.values())
     if total_lessons == 0:
         return "⚠️ Dars jadvali kiritilmagan."
         
-    lines = ["📅 <b>Haftalik dars jadvali</b>\n"]
+    lines = ["<b>HAFTALIK DARS JADVALI</b>\n"]
     
     for day_num in range(7):
         lessons = schedule.get(day_num, [])
-        day_name = UZBEK_DAYS[day_num]
+        day_name = UZBEK_DAYS[day_num].upper()
         
         if not lessons:
             continue
             
         lines.append(f"<b>{day_name}:</b>")
-        for idx, item in enumerate(lessons, 1):
-            time_part = f"{item['time']} — " if item.get('time') else ""
-            room_part = f" ({item['room']})" if item.get('room') else ""
-            lines.append(f"{idx}. {time_part}{item['subject']}{room_part}")
+        for item in lessons:
+            time_raw = clean_str(item.get('time', ''))
+            start_time = time_raw.split('-')[0].strip() if time_raw else ""
+            time_part = f"<b>{escape_html(start_time)}</b>   " if start_time else ""
+            
+            if "subgroups" in item:
+                sg = item["subgroups"]
+                s1 = sg[0]
+                s2 = sg[1]
+                sub1_name = escape_html(s1.get('subject', ''))
+                sub2_name = escape_html(s2.get('subject', ''))
+                if s1.get('subject') == s2.get('subject'):
+                    lines.append(f"{time_part}{sub1_name}")
+                else:
+                    lines.append(f"{time_part}{sub1_name} / {sub2_name}")
+            else:
+                subject_name = escape_html(item.get('subject', ''))
+                lines.append(f"{time_part}{subject_name}")
             
         lines.append("")  # Bo'sh qator
         
