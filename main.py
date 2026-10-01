@@ -313,6 +313,23 @@ async def handle_excel_upload(message: Message, bot: Bot):
         if temp_path.exists():
             temp_path.unlink()
 
+async def start_web_server(port: int):
+    """Render.com va boshqa hostinglar uchun portni tinglab turuvchi yengil server."""
+    from aiohttp import web
+    
+    async def handle_ping(request):
+        return web.Response(text="Bot is running! Status: OK 200", content_type="text/plain")
+
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Web server ishga tushdi: 0.0.0.0:{port}")
+
 async def main():
     if not config.BOT_TOKEN:
         print("\n" + "!" * 60)
@@ -322,6 +339,11 @@ async def main():
         print("3. Qayta ishga tushiring: python main.py")
         print("!" * 60 + "\n")
         return
+
+    # Render.com yoki boshqa bulutli hostinglar uchun web server
+    port = int(os.getenv("PORT", 0))
+    if port:
+        await start_web_server(port)
 
     # Namunaviy fayllarni tayyorlab qo'yish
     if not config.TEMPLATE_FILE.exists():
