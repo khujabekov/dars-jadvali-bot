@@ -1,0 +1,18 @@
+# Muhim maxfiy sozlamalar fayli (Tokenlar va ID lar)
+.env
+
+# Python keshi
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Vaqtinchalik fayllar
+data/temp_*
+
+# Muhit va IDE sozlamalari
+.venv/
+venv/
+ENV/
+.idea/
+.vscode/
